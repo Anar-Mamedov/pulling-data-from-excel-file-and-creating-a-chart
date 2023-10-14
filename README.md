@@ -1,3 +1,5 @@
+<img src="https://raw.githubusercontent.com/Anar-Mamedov/pulling-data-from-excel-file-and-creating-a-chart/main/public/screencapture.png"/>
+
 # React + Vite
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
