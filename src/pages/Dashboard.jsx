@@ -77,8 +77,18 @@ function Dashboard() {
   };
 
   const deleteRow = (rowId) => {
-    const newData = tableData.filter((row) => row[0] !== rowId);
-    setTableData(newData);
+    Modal.confirm({
+      title: "Bu sıranı silmək istədiyinizə əminsiniz?",
+      content: "Bu əməliyyat geri qaytarıla bilməz.",
+      okText: "Bəli",
+      okType: "danger",
+      cancelText: "Xeyir",
+      onOk: () => {
+        const newData = tableData.filter((row) => row[0] !== rowId);
+        setTableData(newData);
+      },
+      onCancel: () => {},
+    });
   };
 
   const handleOk = () => {
