@@ -6,6 +6,14 @@ import { TabulatorFull as Tabulator } from "tabulator-tables";
 import "tabulator-tables/dist/css/tabulator.min.css";
 import { Pie, Bar } from "react-chartjs-2";
 import Chart from "chart.js/auto";
+import { Map, View } from "ol";
+import { Tile as TileLayer } from "ol/layer";
+import { OSM as OSMSource } from "ol/source";
+import { fromLonLat } from "ol/proj";
+import WKT from "ol/format/WKT";
+import { Vector as VectorLayer } from "ol/layer";
+import { Vector as VectorSource } from "ol/source";
+import { Stroke, Style } from "ol/style";
 
 const { Text } = Typography;
 
@@ -22,6 +30,10 @@ function Dashboard() {
   const [chartKey, setChartKey] = useState(0);
   const tableRef = useRef(null);
   const barChartRef = useRef(null);
+  const [map, setMap] = useState(null);
+  const [view, setView] = useState(null);
+  const mapRef = useRef(null);
+  const [showMap, setShowMap] = useState(false);
 
   const handleAnalyseClick2 = () => {
     const rows = tableRef.current.getRows("active");
@@ -181,11 +193,12 @@ function Dashboard() {
         '<svg viewBox="64 64 896 896" width="1em" height="1em" fill="currentColor" aria-hidden="true"><path d="M877.7 238.7a128 128 0 0 0-181.7 0L172.6 762a25.86 25.86 0 0 0-6.5 10.2L71.4 989.6a32.04 32.04 0 0 0 40.7 40.7l217.3-94.8a25.86 25.86 0 0 0 10.2-6.5l523.3-523.4c49.8-49.8 49.8-130.3 0-180.1zM334 863.1l-151.4 66.3L399.3 713l90.6 90.6-155.9 59.5zM781.2 416L642.8 554.4 551.1 462.7 689.6 323.3a31.92 31.92 0 0 1 45.2 0l46.3 46.3a31.92 31.92 0 0 1 0 45.2z"></path></svg>';
       const deleteIconSVG =
         '<svg viewBox="64 64 896 896" width="1em" height="1em" fill="currentColor" aria-hidden="true"><path d="M744 168H536V104c0-17.7-14.3-32-32-32h-192c-17.7 0-32 14.3-32 32v64H176c-4.4 0-8 3.6-8 8v40c0 4.4 3.6 8 8 8h568c4.4 0 8-3.6 8-8v-40c0-4.4-3.6-8-8-8zm-360-64h192v64h-192v-64z"></path><path d="M304 840c0 22.1 17.9 40 40 40h288c22.1 0 40-17.9 40-40V312H304v528zm160-372c0-4.4 3.6-8 8-8h64c4.4 0 8 3.6 8 8v296c0 4.4-3.6 8-8 8h-64c-4.4 0-8-3.6-8-8V468z"></path></svg>';
+      const mapIconSVG = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 11.5C11.337 11.5 10.7011 11.2366 10.2322 10.7678C9.76339 10.2989 9.5 9.66304 9.5 9C9.5 8.33696 9.76339 7.70107 10.2322 7.23223C10.7011 6.76339 11.337 6.5 12 6.5C12.663 6.5 13.2989 6.76339 13.7678 7.23223C14.2366 7.70107 14.5 8.33696 14.5 9C14.5 9.3283 14.4353 9.65339 14.3097 9.95671C14.1841 10.26 13.9999 10.5356 13.7678 10.7678C13.5356 10.9999 13.26 11.1841 12.9567 11.3097C12.6534 11.4353 12.3283 11.5 12 11.5ZM12 2C10.1435 2 8.36301 2.7375 7.05025 4.05025C5.7375 5.36301 5 7.14348 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 7.14348 18.2625 5.36301 16.9497 4.05025C15.637 2.7375 13.8565 2 12 2Z" fill="black"/></svg>`;
 
       const actionColumn = {
         title: "Actions",
         formatter: (cell, formatterParams, onRendered) => {
-          return `<span class='edit-icon'>${editIconSVG}</span> <span class='delete-icon'>${deleteIconSVG}</span>`;
+          return `<span class='edit-icon'>${editIconSVG}</span> <span class='delete-icon'>${deleteIconSVG}</span> <span class='map-icon'>${mapIconSVG}</span>`;
         },
         cellClick: (e, cell) => {
           const rowData = cell.getRow().getData();
@@ -193,6 +206,8 @@ function Dashboard() {
             editRow(rowData.id);
           } else if (e.target.closest(".delete-icon")) {
             deleteRow(rowData.id);
+          } else if (e.target.closest(".map-icon")) {
+            handleMapIconClick(rowData.wkt);
           }
         },
       };
@@ -251,6 +266,62 @@ function Dashboard() {
     };
     return data;
   };
+  useEffect(() => {
+    if (mapRef.current && !document.querySelector(".ol-viewport")) {
+      let initialView = new View({
+        center: fromLonLat([0, 0]),
+        zoom: 2,
+      });
+
+      let mapInstance = new Map({
+        target: mapRef.current,
+        layers: [
+          new TileLayer({
+            source: new OSMSource(),
+          }),
+        ],
+        view: initialView,
+        controls: [],
+      });
+
+      setMap(mapInstance);
+      setView(initialView);
+    }
+  }, []);
+
+  const handleMapIconClick = (wktString) => {
+    const format = new WKT();
+    const feature = format.readFeature(wktString, {
+      dataProjection: "EPSG:4326",
+      featureProjection: "EPSG:3857",
+    });
+
+    map
+      .getLayers()
+      .getArray()
+      .filter((layer) => layer instanceof VectorLayer)
+      .forEach((layer) => map.removeLayer(layer));
+
+    const vector = new VectorLayer({
+      source: new VectorSource({
+        features: [feature],
+      }),
+      style: new Style({
+        stroke: new Stroke({
+          color: "red",
+          width: 2,
+        }),
+      }),
+    });
+
+    map.addLayer(vector);
+    view.fit(feature.getGeometry().getExtent(), { padding: [100, 100, 100, 100] });
+    setShowMap(true);
+
+    setTimeout(() => {
+      map.updateSize();
+    }, 0);
+  };
 
   return (
     <div>
@@ -276,7 +347,13 @@ function Dashboard() {
           <Select.Option value="2">2</Select.Option>
         </Select>
       </Modal>
-      <div id="excel-table"></div>
+      <div style={{ display: "flex" }}>
+        <div id="excel-table"></div>
+        <div
+          ref={mapRef}
+          style={{ width: "500px", height: "500px", marginLeft: "10px", display: showMap ? "block" : "none" }}></div>
+      </div>
+
       <div style={{ display: "flex", gap: "10px", justifyContent: "center", marginTop: "10px" }}>
         <Button onClick={handleAnalyseClick}>Analiz 1</Button>
         <Button onClick={handleAnalyseClick2}>Analiz 2</Button>
