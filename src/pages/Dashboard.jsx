@@ -20,22 +20,28 @@ function Dashboard() {
   const [pieChartKey, setPieChartKey] = useState(0);
   const [chartData2, setChartData2] = useState(null);
   const [chartKey, setChartKey] = useState(0);
+  const tableRef = useRef(null);
+  const barChartRef = useRef(null);
 
   const handleAnalyseClick2 = () => {
+    const rows = tableRef.current.getRows("active");
+    const filteredData = rows.map((row) => row.getData());
+    console.log("Filtered Data for Analysis 2:", filteredData);
+
     const lenIndex = tableData[0].indexOf("len");
     const statusIndex = tableData[0].indexOf("status");
 
-    const sums = {
+    const lenSums = {
       0: 0,
       1: 0,
       2: 0,
     };
 
-    tableData.slice(1).forEach((row) => {
-      const status = row[statusIndex];
-      const len = Number(row[lenIndex]);
-      if (sums[status] !== undefined) {
-        sums[status] += len;
+    filteredData.forEach((row) => {
+      const status = row.status;
+      const len = Number(row.len);
+      if (lenSums[status] !== undefined) {
+        lenSums[status] += len;
       }
     });
 
@@ -44,7 +50,7 @@ function Dashboard() {
       datasets: [
         {
           label: "Status üzrə len cəmi",
-          data: [sums[0], sums[1], sums[2]],
+          data: [lenSums[0], lenSums[1], lenSums[2]],
           fill: false,
           backgroundColor: ["#FF6384", "#36A2EB", "#FFCE56"],
           hoverBackgroundColor: ["#FF6384", "#36A2EB", "#FFCE56"],
@@ -54,12 +60,22 @@ function Dashboard() {
       ],
     };
 
+    console.log("Chart Data:", data);
+
     setChartData2(data);
     setChartKey((prevKey) => prevKey + 1);
   };
 
   const handleAnalyseClick = () => {
-    chartDataRef.current = getChartData();
+    const rows = tableRef.current.getRows("active");
+    const filteredData = rows.map((row) => row.getData());
+    console.log("Filtered Table Data:", filteredData);
+
+    const chartData = getChartData(filteredData);
+    if (!chartData) {
+      return <div>Error generating chart data</div>;
+    }
+    chartDataRef.current = chartData;
     setShowChart(true);
     setPieChartKey((prevKey) => prevKey + 1);
   };
@@ -182,7 +198,7 @@ function Dashboard() {
       };
 
       columns.push(actionColumn);
-      new Tabulator("#excel-table", {
+      tableRef.current = new Tabulator("#excel-table", {
         data: tableData.slice(1).map((row) => {
           let obj = {};
           tableData[0].forEach((header, i) => {
@@ -198,32 +214,27 @@ function Dashboard() {
     }
   }, [tableData]);
 
-  const getChartData = () => {
-    const expectedColumns = ["id", "len", "wkt", "status"];
-    const missingColumns = expectedColumns.filter((col) => !tableData[0].includes(col));
-
-    if (missingColumns.length > 0) {
-      console.error("Missing columns:", missingColumns.join(", "));
-      return;
+  const getChartData = (filteredData) => {
+    if (!filteredData || !filteredData.length) {
+      console.error("filteredData is empty or not provided");
+      return null;
     }
-    const totalRows = tableData.length - 1;
+
+    if (typeof filteredData[0] !== "object") {
+      console.error("filteredData[0] is not an object:", filteredData[0]);
+      return null;
+    }
+
+    const totalRows = filteredData.length;
     let statusCounts = {
       0: 0,
       1: 0,
       2: 0,
     };
 
-    tableData.slice(1).forEach((row) => {
-      let statusIndex = tableData[0].indexOf("status");
-      if (statusIndex === -1) {
-        console.error("Status column not found!");
-        return;
-      }
-
-      let statusValue = row[statusIndex];
-      console.log("Status Value:", statusValue);
-
-      if (statusValue !== undefined && statusValue !== "" && statusCounts[statusValue] !== undefined) {
+    filteredData.forEach((row) => {
+      let statusValue = row.status;
+      if (statusValue !== undefined && statusCounts[statusValue] !== undefined) {
         statusCounts[statusValue]++;
       }
     });
@@ -238,8 +249,6 @@ function Dashboard() {
         },
       ],
     };
-    console.log(data);
-
     return data;
   };
 
@@ -280,7 +289,7 @@ function Dashboard() {
         )}
         {chartData2 && (
           <div style={{ width: "500px", height: "500px", display: "flex", alignItems: "flex-end" }}>
-            <Bar key={chartKey} data={chartData2} options={{ responsive: true }} />
+            <Bar ref={barChartRef} data={chartData2} options={{ responsive: true }} />
           </div>
         )}
       </div>
